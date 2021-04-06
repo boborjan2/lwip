@@ -343,7 +343,7 @@ sock_inc_used(struct lwip_sock *sock)
   int ret;
 #if !ESP_LWIP_LOCK
   SYS_ARCH_DECL_PROTECT(lev);
-#endif /* !ESP_LWIP_LOCK */  
+#endif /* !ESP_LWIP_LOCK */
 
   LWIP_ASSERT("sock != NULL", sock != NULL);
 
@@ -362,9 +362,9 @@ sock_inc_used(struct lwip_sock *sock)
   }
 #if ESP_LWIP_LOCK
   SYS_ARCH_UNPROTECT_SOCK(sock);
-#else 
+#else
   SYS_ARCH_UNPROTECT(lev);
-#endif /* ESP_LWIP_LOCK */  
+#endif /* ESP_LWIP_LOCK */
   return ret;
 }
 
@@ -376,7 +376,7 @@ sock_inc_used_locked(struct lwip_sock *sock)
 
 #if ESP_LWIP_LOCK
   SYS_ARCH_PROTECT_SOCK(sock);
-#endif /* ESP_LWIP_LOCK */  
+#endif /* ESP_LWIP_LOCK */
   if (sock->fd_free_pending) {
     LWIP_ASSERT("sock->fd_used != 0", sock->fd_used != 0);
 #if ESP_LWIP_LOCK
@@ -389,7 +389,7 @@ sock_inc_used_locked(struct lwip_sock *sock)
   LWIP_ASSERT("sock->fd_used != 0", sock->fd_used != 0);
 #if ESP_LWIP_LOCK
   SYS_ARCH_UNPROTECT_SOCK(sock);
-#endif /* ESP_LWIP_LOCK */ 
+#endif /* ESP_LWIP_LOCK */
   return 1;
 }
 
@@ -407,7 +407,7 @@ done_socket(struct lwip_sock *sock)
   union lwip_sock_lastdata lastdata;
 #if !ESP_LWIP_LOCK
   SYS_ARCH_DECL_PROTECT(lev);
-#endif /* !ESP_LWIP_LOCK */ 
+#endif /* !ESP_LWIP_LOCK */
   LWIP_ASSERT("sock != NULL", sock != NULL);
 
 #if ESP_LWIP_LOCK
@@ -426,7 +426,7 @@ done_socket(struct lwip_sock *sock)
   }
 #if ESP_LWIP_LOCK
   SYS_ARCH_UNPROTECT_SOCK(sock);
-#else 
+#else
   SYS_ARCH_UNPROTECT(lev);
 #endif /* ESP_LWIP_LOCK */
 
@@ -482,10 +482,10 @@ tryget_socket_unconn_locked(int fd)
 {
   struct lwip_sock *ret = tryget_socket_unconn_nouse(fd);
   if (ret != NULL) {
-#if ESP_LWIP      
+#if ESP_LWIP
     if (ret->conn == NULL)
       return NULL;
-#endif /* ESP_LWIP */         
+#endif /* ESP_LWIP */
     if (!sock_inc_used_locked(ret)) {
       return NULL;
     }
@@ -661,7 +661,7 @@ free_socket(struct lwip_sock *sock, int is_tcp)
   freed = free_socket_locked(sock, is_tcp, &conn, &lastdata);
 #if ESP_LWIP_LOCK
   SYS_ARCH_UNPROTECT_SOCK(sock);
-#else 
+#else
   SYS_ARCH_UNPROTECT(lev);
 #endif /* ESP_LWIP_LOCK */
   /* don't use 'sock' after this line, as another task might have allocated it */
@@ -2207,6 +2207,13 @@ lwip_select(int maxfdp1, fd_set *readset, fd_set *writeset, fd_set *exceptset,
         /* See what's set now after waiting */
         nready = lwip_selscan(maxfdp1, readset, writeset, exceptset, &lreadset, &lwriteset, &lexceptset);
         LWIP_DEBUGF(SOCKETS_DEBUG, ("lwip_select: nready=%d\n", nready));
+
+        /* VBn: https://github.com/espressif/esp-lwip/issues/27 */
+        if(nready < 0) {
+          set_errno(EBADF);
+          lwip_select_dec_sockets_used(maxfdp1, &used_sockets);
+          return -1;
+        }
       }
     }
   }
@@ -2566,9 +2573,9 @@ event_callback(struct netconn *conn, enum netconn_evt evt, u16_t len)
     }
 #if ESP_LWIP_LOCK
     sock = tryget_socket_unconn_nouse(s);
-#else    
+#else
     sock = get_socket(s);
-#endif /* ESP_LWIP_LOCK */    
+#endif /* ESP_LWIP_LOCK */
     if (!sock) {
       return;
     }
@@ -2618,15 +2625,15 @@ event_callback(struct netconn *conn, enum netconn_evt evt, u16_t len)
     /* Check any select calls waiting on this socket */
 #if ESP_LWIP_SELECT
     select_check_waiters(s, has_recvevent, has_sendevent, has_errevent, sock);
-#else    
+#else
     select_check_waiters(s, has_recvevent, has_sendevent, has_errevent);
-#endif/* LWIP_SOCKET_SELECT */   
-  } else {       
+#endif/* LWIP_SOCKET_SELECT */
+  } else {
     SYS_ARCH_UNPROTECT(lev);
   }
-#if !ESP_LWIP_LOCK  
+#if !ESP_LWIP_LOCK
    done_socket(sock);
-#endif /* !ESP_LWIP_LOCK */  
+#endif /* !ESP_LWIP_LOCK */
 }
 
 /**
@@ -2651,9 +2658,9 @@ static void select_check_waiters(int s, int has_recvevent, int has_sendevent, in
   struct lwip_select_cb *scb;
 #if ESP_LWIP_SELECT
   struct lwip_sock *sock = sock_select;
-#else  
+#else
   struct lwip_sock *sock
-#endif /* ESP_LWIP_LOCK */ 
+#endif /* ESP_LWIP_LOCK */
 #if !LWIP_TCPIP_CORE_LOCKING
   int last_select_cb_ctr;
   SYS_ARCH_DECL_PROTECT(lev);
@@ -2681,29 +2688,29 @@ again:
 #if LWIP_SOCKET_SELECT
       {
         /* Test this select call for our socket */
-#if ESP_LWIP_SELECT         
+#if ESP_LWIP_SELECT
         if (sock->rcvevent) {
-#else            
+#else
         if (has_recvevent) {
-#endif/* ESP_LWIP_SELECT */                 
+#endif/* ESP_LWIP_SELECT */
           if (scb->readset && FD_ISSET(s, scb->readset)) {
             do_signal = 1;
           }
         }
-#if ESP_LWIP_SELECT         
+#if ESP_LWIP_SELECT
         if (sock->sendevent) {
-#else        
+#else
         if (has_sendevent) {
-#endif/* ESP_LWIP_SELECT */            
+#endif/* ESP_LWIP_SELECT */
           if (!do_signal && scb->writeset && FD_ISSET(s, scb->writeset)) {
             do_signal = 1;
           }
         }
-#if ESP_LWIP_SELECT         
+#if ESP_LWIP_SELECT
         if (sock->errevent) {
-#else        
+#else
         if (has_errevent) {
-#endif/* ESP_LWIP_SELECT */            
+#endif/* ESP_LWIP_SELECT */
           if (!do_signal && scb->exceptset && FD_ISSET(s, scb->exceptset)) {
             do_signal = 1;
           }
@@ -3753,7 +3760,7 @@ lwip_setsockopt_impl(int s, int level, int optname, const void *optval, socklen_
           udp_setflags(sock->conn->pcb.udp, udp_flags(sock->conn->pcb.udp) & ~UDP_FLAGS_MULTICAST_LOOP);
           }
           break;
-#endif/* ESP_IPV6 */          
+#endif/* ESP_IPV6 */
 #if LWIP_IPV6_MLD
         case IPV6_JOIN_GROUP:
         case IPV6_LEAVE_GROUP: {

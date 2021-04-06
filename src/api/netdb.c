@@ -306,7 +306,9 @@ lwip_getaddrinfo(const char *nodename, const char *servname,
     /* service name specified: convert to port number
      * @todo?: currently, only ASCII integers (port numbers) are supported (AI_NUMERICSERV)! */
     port_nr = atoi(servname);
-    if ((port_nr <= 0) || (port_nr > 0xffff)) {
+    /* VBN: port_nr 0 is for dynamic port allocation, bind will handle it ok */
+    /* https://github.com/espressif/esp-lwip/issues/28 */
+    if ((port_nr < 0) || (port_nr > 0xffff)) {
       return EAI_SERVICE;
     }
   }
